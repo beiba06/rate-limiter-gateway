@@ -1,0 +1,13 @@
+# Baked into the image. Same as config.yaml, with Compose service names as hosts.
+listen: ":8080"
+admin_listen: ":9090" # Compose publishes this on loopback only.
+redis_addr: "redis:6379"
+algorithm: token_bucket
+
+routes:
+  - prefix: /api/
+    backend: http://backend:80
+
+keys:
+  user1: { limit: 5, window: 10s }
+  user2: { limit: 100, window: 1s }
