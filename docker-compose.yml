@@ -35,3 +35,9 @@ services:
       - ./grafana/dashboard.json:/var/lib/grafana/dashboards/gateway.json:ro
     ports:
       - "127.0.0.1:3000:3000"
+
+  k6:
+    image: grafana/k6:2.3.0
+    profiles: [bench]
+    volumes:
+      - ./bench:/bench:ro

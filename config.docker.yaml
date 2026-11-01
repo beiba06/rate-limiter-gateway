@@ -1,4 +1,5 @@
-# Baked into the image. Same as config.yaml, with Compose service names as hosts.
+# Baked into the image. Same as config.yaml, with Compose service names as hosts,
+# plus the keys used by bench/.
 listen: ":8080"
 admin_listen: ":9090" # Compose publishes this on loopback only.
 redis_addr: "redis:6379"
@@ -11,3 +12,6 @@ routes:
 keys:
   user1: { limit: 5, window: 10s }
   user2: { limit: 100, window: 1s }
+  bench_open: { limit: 10000000, window: 10s } # Never limited: measures the allowed path.
+  bench_hot: { limit: 100, window: 1s } # Mostly rejected: measures the rejected path.
+  bench_edge: { limit: 100, window: 5s } # Boundary burst test.
