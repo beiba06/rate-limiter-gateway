@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -211,6 +212,42 @@ func TestStateExpiresWhenIdle(t *testing.T) {
 	}
 }
 
+func TestAlgorithmSwitchReachesOtherInstances(t *testing.T) {
+	rdb, _ := setup(t)
+	ctx := context.Background()
+	a, b := NewLimiter(rdb, "token_bucket"), NewLimiter(rdb, "token_bucket")
+
+	if err := a.SetAlgorithm(ctx, "fixed_window"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if b.Algorithm() != "fixed_window" {
+		t.Fatalf("instance b is on %s", b.Algorithm())
+	}
+
+	// A restart with a different configured default must not undo a live switch.
+	c := NewLimiter(rdb, "sliding_window")
+	if err := c.sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if c.Algorithm() != "fixed_window" {
+		t.Fatalf("restarted instance is on %s", c.Algorithm())
+	}
+}
+
+func TestSetAlgorithmRejectsUnknownName(t *testing.T) {
+	rdb, _ := setup(t)
+	l := NewLimiter(rdb, "token_bucket")
+	if err := l.SetAlgorithm(context.Background(), "leaky_bucket"); err == nil {
+		t.Fatal("expected an error")
+	}
+	if l.Algorithm() != "token_bucket" {
+		t.Fatalf("algorithm changed to %s", l.Algorithm())
+	}
+}
+
 func gateway(t *testing.T, l *Limiter, keys map[string]Limit) (*httptest.Server, *atomic.Int64) {
 	t.Helper()
 	var hits atomic.Int64
@@ -325,5 +362,34 @@ func TestRouterSendsPrefixToItsBackend(t *testing.T) {
 	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/nothing", nil))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unrouted path returned %d", w.Code)
+	}
+}
+
+func TestAdminAlgorithmEndpoint(t *testing.T) {
+	rdb, _ := setup(t)
+	l := NewLimiter(rdb, "token_bucket")
+	admin := httptest.NewServer(adminHandler(l))
+	t.Cleanup(admin.Close)
+
+	post := func(body string) int {
+		resp, err := http.Post(admin.URL+"/admin/algorithm", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	if got := post(`{"algorithm":"sliding_window"}`); got != http.StatusOK {
+		t.Fatalf("valid switch returned %d", got)
+	}
+	if l.Algorithm() != "sliding_window" {
+		t.Fatalf("algorithm is %s", l.Algorithm())
+	}
+	if got := post(`{"algorithm":"leaky_bucket"}`); got != http.StatusBadRequest {
+		t.Fatalf("unknown algorithm returned %d", got)
+	}
+	if got := post(`not json`); got != http.StatusBadRequest {
+		t.Fatalf("malformed body returned %d", got)
 	}
 }

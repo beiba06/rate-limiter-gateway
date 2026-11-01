@@ -1,5 +1,6 @@
 # Used by `go run . --config config.yaml`, with Redis and the backend on localhost.
 listen: ":8080"
+admin_listen: "127.0.0.1:9090" # /admin/algorithm. Never expose publicly.
 redis_addr: "localhost:6379"
 algorithm: token_bucket # token_bucket | sliding_window | fixed_window
 

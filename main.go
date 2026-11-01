@@ -22,11 +22,12 @@ type Route struct {
 }
 
 type Config struct {
-	Listen    string           `yaml:"listen"`
-	RedisAddr string           `yaml:"redis_addr"`
-	Algorithm string           `yaml:"algorithm"`
-	Routes    []Route          `yaml:"routes"`
-	Keys      map[string]Limit `yaml:"keys"`
+	Listen      string           `yaml:"listen"`
+	AdminListen string           `yaml:"admin_listen"`
+	RedisAddr   string           `yaml:"redis_addr"`
+	Algorithm   string           `yaml:"algorithm"`
+	Routes      []Route          `yaml:"routes"`
+	Keys        map[string]Limit `yaml:"keys"`
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -77,21 +78,31 @@ func main() {
 	defer stop()
 
 	limiter := NewLimiter(rdb, cfg.Algorithm)
+	go limiter.Sync(ctx, time.Second)
 
 	gateway := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           withRateLimit(cfg.Keys, limiter, router),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	go func() {
-		log.Printf("listening on %s", gateway.Addr)
-		if err := gateway.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
-		}
-	}()
+	admin := &http.Server{
+		Addr:              cfg.AdminListen,
+		Handler:           adminHandler(limiter),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	for _, srv := range []*http.Server{gateway, admin} {
+		go func() {
+			log.Printf("listening on %s", srv.Addr)
+			if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+				log.Fatal(err)
+			}
+		}()
+	}
 
 	<-ctx.Done()
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	gateway.Shutdown(shutdown)
+	admin.Shutdown(shutdown)
 }

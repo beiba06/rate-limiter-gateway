@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -19,6 +22,12 @@ type Decision struct {
 	Allowed    bool
 	RetryAfter time.Duration
 }
+
+// algorithmKey holds the active algorithm in Redis so that a switch reaches every
+// gateway instance, not just the one that received the admin request.
+const algorithmKey = "ratelimit:algorithm"
+
+var errUnknownAlgorithm = errors.New("unknown algorithm")
 
 // Every script takes KEYS[1] = state key, ARGV = limit, window_ms and returns
 // {allowed, retry_after_ms}. Each one reads the clock from Redis TIME rather than
@@ -95,21 +104,77 @@ var scripts = map[string]*redis.Script{
 
 type Limiter struct {
 	rdb       *redis.Client
-	algorithm string
+	fallback  string
+	algorithm atomic.Pointer[string]
 }
 
+// NewLimiter starts on algorithm until Sync reads the value shared through Redis.
 func NewLimiter(rdb *redis.Client, algorithm string) *Limiter {
-	return &Limiter{rdb: rdb, algorithm: algorithm}
+	l := &Limiter{rdb: rdb, fallback: algorithm}
+	l.algorithm.Store(&algorithm)
+	return l
 }
 
-// Allow checks and consumes quota in one atomic script.
-func (l *Limiter) Allow(ctx context.Context, key string, limit Limit) (Decision, error) {
-	stateKey := fmt.Sprintf("ratelimit:%s:%s", l.algorithm, key)
+func (l *Limiter) Algorithm() string { return *l.algorithm.Load() }
 
-	reply, err := scripts[l.algorithm].Run(ctx, l.rdb, []string{stateKey},
+// Allow checks and consumes quota in one atomic script. State keys include the
+// algorithm, so a live switch starts every key with a fresh allowance.
+func (l *Limiter) Allow(ctx context.Context, key string, limit Limit) (Decision, error) {
+	algorithm := l.Algorithm()
+	stateKey := fmt.Sprintf("ratelimit:%s:%s", algorithm, key)
+
+	reply, err := scripts[algorithm].Run(ctx, l.rdb, []string{stateKey},
 		limit.Limit, limit.Window.Milliseconds()).Int64Slice()
 	if err != nil {
 		return Decision{}, err
 	}
 	return Decision{Allowed: reply[0] == 1, RetryAfter: time.Duration(reply[1]) * time.Millisecond}, nil
+}
+
+// SetAlgorithm publishes a switch to every instance. It applies locally straight
+// away; other instances pick it up on their next Sync.
+func (l *Limiter) SetAlgorithm(ctx context.Context, algorithm string) error {
+	if _, ok := scripts[algorithm]; !ok {
+		return fmt.Errorf("%w: %q", errUnknownAlgorithm, algorithm)
+	}
+	if err := l.rdb.Set(ctx, algorithmKey, algorithm, 0).Err(); err != nil {
+		return err
+	}
+	l.algorithm.Store(&algorithm)
+	return nil
+}
+
+func (l *Limiter) sync(ctx context.Context) error {
+	if err := l.rdb.SetNX(ctx, algorithmKey, l.fallback, 0).Err(); err != nil {
+		return err
+	}
+	algorithm, err := l.rdb.Get(ctx, algorithmKey).Result()
+	if err != nil {
+		return err
+	}
+	if _, ok := scripts[algorithm]; !ok {
+		return fmt.Errorf("%w: %q in Redis", errUnknownAlgorithm, algorithm)
+	}
+	if algorithm != l.Algorithm() {
+		log.Printf("algorithm is now %s", algorithm)
+		l.algorithm.Store(&algorithm)
+	}
+	return nil
+}
+
+// Sync polls the shared algorithm until ctx ends. It also doubles as the Redis
+// health log: at one line per tick, an outage doesn't log once per request.
+func (l *Limiter) Sync(ctx context.Context, every time.Duration) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		if err := l.sync(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("redis: %v (failing open)", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }

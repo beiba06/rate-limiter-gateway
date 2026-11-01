@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"net/http"
@@ -64,4 +66,31 @@ func withRateLimit(keys map[string]Limit, limiter *Limiter, next http.Handler) h
 // would invite a retry that is guaranteed to be rejected.
 func retryAfterSeconds(d time.Duration) string {
 	return strconv.FormatInt(int64(math.Ceil(d.Seconds())), 10)
+}
+
+type algorithmBody struct {
+	Algorithm string `json:"algorithm"`
+}
+
+func adminHandler(limiter *Limiter) http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /admin/algorithm", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(algorithmBody{limiter.Algorithm()})
+	})
+	mux.HandleFunc("POST /admin/algorithm", func(w http.ResponseWriter, r *http.Request) {
+		var body algorithmBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		switch err := limiter.SetAlgorithm(r.Context(), body.Algorithm); {
+		case errors.Is(err, errUnknownAlgorithm):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		case err != nil:
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		default:
+			json.NewEncoder(w).Encode(body)
+		}
+	})
+	return mux
 }
