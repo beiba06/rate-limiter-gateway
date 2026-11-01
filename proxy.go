@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // The default transport keeps only 2 idle connections per host, which churns TCP
@@ -50,6 +52,7 @@ func withRateLimit(keys map[string]Limit, limiter *Limiter, next http.Handler) h
 		}
 		decision, err := limiter.Allow(r.Context(), key, limit)
 		if err != nil {
+			redisErrors.Inc()
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -74,6 +77,7 @@ type algorithmBody struct {
 
 func adminHandler(limiter *Limiter) http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", promhttp.Handler())
 	mux.HandleFunc("GET /admin/algorithm", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(algorithmBody{limiter.Algorithm()})
 	})

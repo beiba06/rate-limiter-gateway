@@ -123,8 +123,10 @@ func (l *Limiter) Allow(ctx context.Context, key string, limit Limit) (Decision,
 	algorithm := l.Algorithm()
 	stateKey := fmt.Sprintf("ratelimit:%s:%s", algorithm, key)
 
+	start := time.Now()
 	reply, err := scripts[algorithm].Run(ctx, l.rdb, []string{stateKey},
 		limit.Limit, limit.Window.Milliseconds()).Int64Slice()
+	limiterDuration.WithLabelValues(algorithm).Observe(time.Since(start).Seconds())
 	if err != nil {
 		return Decision{}, err
 	}

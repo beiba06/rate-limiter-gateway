@@ -82,7 +82,7 @@ func main() {
 
 	gateway := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           withRateLimit(cfg.Keys, limiter, router),
+		Handler:           withMetrics(cfg.Keys, limiter, withRateLimit(cfg.Keys, limiter, router)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	admin := &http.Server{

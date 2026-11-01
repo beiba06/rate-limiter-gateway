@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -261,7 +262,7 @@ func gateway(t *testing.T, l *Limiter, keys map[string]Limit) (*httptest.Server,
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := httptest.NewServer(withRateLimit(keys, l, router))
+	server := httptest.NewServer(withMetrics(keys, l, withRateLimit(keys, l, router)))
 	t.Cleanup(server.Close)
 	return server, &hits
 }
@@ -391,5 +392,25 @@ func TestAdminAlgorithmEndpoint(t *testing.T) {
 	}
 	if got := post(`not json`); got != http.StatusBadRequest {
 		t.Fatalf("malformed body returned %d", got)
+	}
+}
+
+func TestMetricsCollapseUnknownKeysIntoOneLabel(t *testing.T) {
+	rdb, _ := setup(t)
+	keys := map[string]Limit{"user1": {Limit: 5, Window: time.Second}}
+	server, _ := gateway(t, NewLimiter(rdb, "token_bucket"), keys)
+	admin := httptest.NewServer(adminHandler(NewLimiter(rdb, "token_bucket")))
+	t.Cleanup(admin.Close)
+
+	request(t, server.URL+"/api/hello", "attacker-controlled-value")
+	body, err := io.ReadAll(request(t, admin.URL+"/metrics", "").Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "attacker-controlled-value") {
+		t.Fatal("raw X-API-Key value leaked into metric labels")
+	}
+	if !strings.Contains(string(body), `key="unknown"`) {
+		t.Fatal(`expected a key="unknown" series`)
 	}
 }
