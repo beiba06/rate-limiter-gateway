@@ -1,0 +1,6 @@
+# Used by `go run . --config config.yaml`, with the backend on localhost.
+listen: ":8080"
+
+routes:
+  - prefix: /api/
+    backend: http://localhost:9001
