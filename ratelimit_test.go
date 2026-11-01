@@ -238,6 +238,23 @@ func TestAlgorithmSwitchReachesOtherInstances(t *testing.T) {
 	}
 }
 
+func TestRedisRestartKeepsLiveAlgorithm(t *testing.T) {
+	rdb, c := setup(t)
+	ctx := context.Background()
+	l := NewLimiter(rdb, "token_bucket")
+	if err := l.SetAlgorithm(ctx, "fixed_window"); err != nil {
+		t.Fatal(err)
+	}
+
+	c.server.FlushAll()
+	if err := l.sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := rdb.Get(ctx, algorithmKey).Result(); got != "fixed_window" {
+		t.Fatalf("Redis was re-seeded with %q, want the live algorithm", got)
+	}
+}
+
 func TestFailOpenIsFast(t *testing.T) {
 	server := miniredis.RunT(t)
 	rdb := newRedisClient(server.Addr())

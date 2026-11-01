@@ -104,13 +104,12 @@ var scripts = map[string]*redis.Script{
 
 type Limiter struct {
 	rdb       *redis.Client
-	fallback  string
 	algorithm atomic.Pointer[string]
 }
 
 // NewLimiter starts on algorithm until Sync reads the value shared through Redis.
 func NewLimiter(rdb *redis.Client, algorithm string) *Limiter {
-	l := &Limiter{rdb: rdb, fallback: algorithm}
+	l := &Limiter{rdb: rdb}
 	l.algorithm.Store(&algorithm)
 	return l
 }
@@ -147,7 +146,9 @@ func (l *Limiter) SetAlgorithm(ctx context.Context, algorithm string) error {
 }
 
 func (l *Limiter) sync(ctx context.Context) error {
-	if err := l.rdb.SetNX(ctx, algorithmKey, l.fallback, 0).Err(); err != nil {
+	// Seed with the running algorithm, not the configured one: Redis may have lost
+	// the key in a restart, and that must not silently undo a live switch.
+	if err := l.rdb.SetNX(ctx, algorithmKey, l.Algorithm(), 0).Err(); err != nil {
 		return err
 	}
 	algorithm, err := l.rdb.Get(ctx, algorithmKey).Result()
