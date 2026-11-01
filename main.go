@@ -50,6 +50,28 @@ func loadConfig(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// quietLogger drops go-redis's per-dial logging, which fires once per request during
+// an outage. Limiter.Sync reports Redis failures at a fixed rate instead.
+type quietLogger struct{}
+
+func (quietLogger) Printf(context.Context, string, ...any) {}
+
+// newRedisClient bounds how long an outage can delay a request, since every request
+// waits on this client before it can fail open. The go-redis defaults would add 400ms
+// per request (DialerRetries: 5) or 1.1s when the pool is exhausted (PoolTimeout).
+func newRedisClient(addr string) *redis.Client {
+	redis.SetLogger(quietLogger{})
+	return redis.NewClient(&redis.Options{
+		Addr:          addr,
+		DialTimeout:   100 * time.Millisecond,
+		DialerRetries: 1,
+		ReadTimeout:   100 * time.Millisecond,
+		WriteTimeout:  100 * time.Millisecond,
+		PoolTimeout:   100 * time.Millisecond,
+		MaxRetries:    -1,
+	})
+}
+
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
 	flag.Parse()
@@ -63,15 +85,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Short timeouts and no retries: a stalled Redis must fail open quickly
-	// rather than queue every request behind it.
-	rdb := redis.NewClient(&redis.Options{
-		Addr:         cfg.RedisAddr,
-		DialTimeout:  100 * time.Millisecond,
-		ReadTimeout:  100 * time.Millisecond,
-		WriteTimeout: 100 * time.Millisecond,
-		MaxRetries:   -1,
-	})
+	rdb := newRedisClient(cfg.RedisAddr)
 	defer rdb.Close()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

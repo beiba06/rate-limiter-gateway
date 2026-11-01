@@ -238,6 +238,23 @@ func TestAlgorithmSwitchReachesOtherInstances(t *testing.T) {
 	}
 }
 
+func TestFailOpenIsFast(t *testing.T) {
+	server := miniredis.RunT(t)
+	rdb := newRedisClient(server.Addr())
+	t.Cleanup(func() { rdb.Close() })
+	server.Close()
+
+	l := NewLimiter(rdb, "token_bucket")
+	start := time.Now()
+	_, err := l.Allow(context.Background(), "user", Limit{Limit: 1, Window: time.Second})
+	if err == nil {
+		t.Fatal("expected an error with Redis down")
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("failing open took %v; every request pays this during an outage", elapsed)
+	}
+}
+
 func TestSetAlgorithmRejectsUnknownName(t *testing.T) {
 	rdb, _ := setup(t)
 	l := NewLimiter(rdb, "token_bucket")
