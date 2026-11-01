@@ -1,7 +1,7 @@
 # Used by `go run . --config config.yaml`, with Redis and the backend on localhost.
 listen: ":8080"
 redis_addr: "localhost:6379"
-algorithm: token_bucket
+algorithm: token_bucket # token_bucket | sliding_window | fixed_window
 
 routes:
   - prefix: /api/

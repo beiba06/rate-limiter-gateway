@@ -8,7 +8,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Limit allows Limit requests per Window.
+// Limit allows Limit requests per Window. The same pair drives all three
+// algorithms so they can be compared on identical quotas.
 type Limit struct {
 	Limit  int64         `yaml:"limit"`
 	Window time.Duration `yaml:"window"`
@@ -48,8 +49,48 @@ redis.call('PEXPIRE', KEYS[1], window)
 return {allowed, retry}
 `)
 
+// One sorted-set entry per admitted request, so memory is bounded by limit.
+// Members embed the count because two requests in the same millisecond would
+// otherwise share a member, and the second ZADD would silently not count.
+var slidingWindow = redis.NewScript(`
+local limit, window = tonumber(ARGV[1]), tonumber(ARGV[2])
+local t = redis.call('TIME')
+local now = t[1] * 1000 + math.floor(t[2] / 1000)
+
+redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - window)
+local count = redis.call('ZCARD', KEYS[1])
+if count < limit then
+  redis.call('ZADD', KEYS[1], now, string.format('%.0f:%d', now, count))
+  redis.call('PEXPIRE', KEYS[1], window)
+  return {1, 0}
+end
+
+local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
+return {0, tonumber(oldest[2]) + window - now}
+`)
+
+// The counter expires exactly on the window boundary, so one key is enough and
+// no window id has to be derived inside the script.
+var fixedWindow = redis.NewScript(`
+local limit, window = tonumber(ARGV[1]), tonumber(ARGV[2])
+local t = redis.call('TIME')
+local now = t[1] * 1000 + math.floor(t[2] / 1000)
+local reset = (math.floor(now / window) + 1) * window
+
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+  redis.call('PEXPIREAT', KEYS[1], reset)
+end
+if count <= limit then
+  return {1, 0}
+end
+return {0, reset - now}
+`)
+
 var scripts = map[string]*redis.Script{
-	"token_bucket": tokenBucket,
+	"token_bucket":   tokenBucket,
+	"sliding_window": slidingWindow,
+	"fixed_window":   fixedWindow,
 }
 
 type Limiter struct {

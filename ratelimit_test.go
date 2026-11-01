@@ -13,7 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var algorithms = []string{"token_bucket"}
+var algorithms = []string{"token_bucket", "sliding_window", "fixed_window"}
 
 // clock drives miniredis time. Both are needed: SetTime moves what the scripts
 // read from TIME, FastForward moves key expiry.
@@ -140,6 +140,32 @@ func TestConcurrentRequestsCannotOvershoot(t *testing.T) {
 	}
 }
 
+// The trade-off from the README, as an executable claim: send the full quota in
+// the last 100ms of a window and again in the first 100ms of the next one.
+func TestWindowBoundaryBurst(t *testing.T) {
+	limit := Limit{Limit: 100, Window: 10 * time.Second}
+	want := map[string]int{
+		"fixed_window":   200, // Double the quota inside 200ms.
+		"sliding_window": 100,
+		"token_bucket":   102, // The quota, plus 200ms of refill at 10 tokens/s.
+	}
+
+	for _, algorithm := range algorithms {
+		t.Run(algorithm, func(t *testing.T) {
+			rdb, c := setup(t)
+			l := NewLimiter(rdb, algorithm)
+
+			c.advance(limit.Window - 100*time.Millisecond)
+			got := admitted(t, l, "user", limit, 100)
+			c.advance(200 * time.Millisecond)
+			got += admitted(t, l, "user", limit, 100)
+			if got != want[algorithm] {
+				t.Fatalf("admitted %d around the boundary, want %d", got, want[algorithm])
+			}
+		})
+	}
+}
+
 func TestTokenBucketRefillIsCappedAtCapacity(t *testing.T) {
 	rdb, c := setup(t)
 	l := NewLimiter(rdb, "token_bucket")
@@ -151,6 +177,21 @@ func TestTokenBucketRefillIsCappedAtCapacity(t *testing.T) {
 	c.advance(limit.Window / 2)
 	if got := admitted(t, l, "user", limit, 20); got != 5 {
 		t.Fatalf("admitted %d after idling, want capacity 5", got)
+	}
+}
+
+func TestSlidingWindowMemoryIsBoundedByLimit(t *testing.T) {
+	rdb, c := setup(t)
+	l := NewLimiter(rdb, "sliding_window")
+	limit := Limit{Limit: 5, Window: 10 * time.Second}
+
+	admitted(t, l, "user", limit, 500)
+	entries, err := c.server.ZMembers("ratelimit:sliding_window:user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 5 {
+		t.Fatalf("stored %d entries, want 5: rejected requests must not be logged", len(entries))
 	}
 }
 
