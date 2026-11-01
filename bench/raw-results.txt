@@ -1,0 +1,61 @@
+# Environment: 4 vCPU, 6197440512 bytes (k6, gateway, Redis and backend share it)
+# Allowed path: 3000 req/s for 30s, 3 trials. Order rotates so no algorithm always runs first.
+{"label":"baseline_no_gateway","target_rate":3000,"achieved_rate":3000,"p50_ms":0.09,"p95_ms":0.2,"p99_ms":0.71,"max_ms":12.18,"allowed":89999,"rejected":0,"errors":0,"dropped":0}
+{"label":"allowed:token_bucket","target_rate":3000,"achieved_rate":3000,"p50_ms":0.23,"p95_ms":0.61,"p99_ms":1.71,"max_ms":9.55,"allowed":89999,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:token_bucket","bytes":97}
+{"label":"allowed:sliding_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.25,"p95_ms":1.17,"p99_ms":2.49,"max_ms":17.54,"allowed":90002,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:sliding_window","bytes":2379104}
+{"label":"allowed:fixed_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.22,"p95_ms":0.51,"p99_ms":1.3,"max_ms":8.2,"allowed":90000,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:fixed_window","bytes":62}
+{"label":"baseline_no_gateway","target_rate":3000,"achieved_rate":3000,"p50_ms":0.09,"p95_ms":0.16,"p99_ms":0.49,"max_ms":6.08,"allowed":90000,"rejected":0,"errors":0,"dropped":0}
+{"label":"allowed:sliding_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.25,"p95_ms":1.06,"p99_ms":2.15,"max_ms":14.51,"allowed":89999,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:sliding_window","bytes":2523152}
+{"label":"allowed:fixed_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.22,"p95_ms":0.51,"p99_ms":1.25,"max_ms":5.3,"allowed":90001,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:fixed_window","bytes":62}
+{"label":"allowed:token_bucket","target_rate":3000,"achieved_rate":3010,"p50_ms":0.22,"p95_ms":0.46,"p99_ms":1.06,"max_ms":14.64,"allowed":90000,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:token_bucket","bytes":97}
+{"label":"baseline_no_gateway","target_rate":3000,"achieved_rate":3000,"p50_ms":0.09,"p95_ms":0.16,"p99_ms":0.48,"max_ms":2.99,"allowed":90001,"rejected":0,"errors":0,"dropped":0}
+{"label":"allowed:fixed_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.22,"p95_ms":0.44,"p99_ms":0.92,"max_ms":4.29,"allowed":90002,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:fixed_window","bytes":62}
+{"label":"allowed:token_bucket","target_rate":3000,"achieved_rate":3000,"p50_ms":0.22,"p95_ms":0.49,"p99_ms":1.14,"max_ms":7.54,"allowed":90001,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:token_bucket","bytes":97}
+{"label":"allowed:sliding_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.22,"p95_ms":0.44,"p99_ms":1,"max_ms":12.52,"allowed":89999,"rejected":0,"errors":0,"dropped":0}
+{"label":"memory:sliding_window","bytes":2446480}
+# Rejected path: quota 100 req/s under 3000 req/s of load
+{"label":"rejected:token_bucket","target_rate":3000,"achieved_rate":3012,"p50_ms":0.12,"p95_ms":0.22,"p99_ms":0.71,"max_ms":6.8,"allowed":3087,"rejected":86912,"errors":0,"dropped":0}
+{"label":"rejected:sliding_window","target_rate":3000,"achieved_rate":3011,"p50_ms":0.12,"p95_ms":0.21,"p99_ms":0.6,"max_ms":4.45,"allowed":3000,"rejected":87002,"errors":0,"dropped":0}
+{"label":"rejected:fixed_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.11,"p95_ms":0.2,"p99_ms":0.75,"max_ms":45.11,"allowed":3100,"rejected":86903,"errors":0,"dropped":0}
+{"label":"rejected:sliding_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.12,"p95_ms":0.23,"p99_ms":0.64,"max_ms":4.61,"allowed":3000,"rejected":87001,"errors":0,"dropped":0}
+{"label":"rejected:fixed_window","target_rate":3000,"achieved_rate":3012,"p50_ms":0.12,"p95_ms":0.24,"p99_ms":0.46,"max_ms":6.78,"allowed":3100,"rejected":86901,"errors":0,"dropped":0}
+{"label":"rejected:token_bucket","target_rate":3000,"achieved_rate":3000,"p50_ms":0.12,"p95_ms":0.22,"p99_ms":0.68,"max_ms":5.76,"allowed":3099,"rejected":86899,"errors":0,"dropped":0}
+{"label":"rejected:fixed_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.13,"p95_ms":0.32,"p99_ms":0.74,"max_ms":18.67,"allowed":3100,"rejected":86900,"errors":0,"dropped":0}
+{"label":"rejected:token_bucket","target_rate":3000,"achieved_rate":3010,"p50_ms":0.12,"p95_ms":0.22,"p99_ms":0.72,"max_ms":5.8,"allowed":3089,"rejected":86910,"errors":0,"dropped":0}
+{"label":"rejected:sliding_window","target_rate":3000,"achieved_rate":3000,"p50_ms":0.13,"p95_ms":0.26,"p99_ms":0.65,"max_ms":7.51,"allowed":3000,"rejected":87002,"errors":0,"dropped":0}
+# Boundary burst: quota 100 per 5s, two full-quota bursts around the boundary
+{"label":"token_bucket","quota":100,"before_boundary":100,"after_boundary":6,"total_admitted":106,"first_burst_end_vs_boundary_ms":-276,"elapsed_ms":356}
+{"label":"token_bucket","quota":100,"before_boundary":100,"after_boundary":6,"total_admitted":106,"first_burst_end_vs_boundary_ms":-270,"elapsed_ms":354}
+{"label":"token_bucket","quota":100,"before_boundary":100,"after_boundary":6,"total_admitted":106,"first_burst_end_vs_boundary_ms":-269,"elapsed_ms":355}
+{"label":"sliding_window","quota":100,"before_boundary":100,"after_boundary":0,"total_admitted":100,"first_burst_end_vs_boundary_ms":-275,"elapsed_ms":355}
+{"label":"sliding_window","quota":100,"before_boundary":100,"after_boundary":0,"total_admitted":100,"first_burst_end_vs_boundary_ms":-270,"elapsed_ms":353}
+{"label":"sliding_window","quota":100,"before_boundary":100,"after_boundary":0,"total_admitted":100,"first_burst_end_vs_boundary_ms":-260,"elapsed_ms":353}
+{"label":"fixed_window","quota":100,"before_boundary":100,"after_boundary":100,"total_admitted":200,"first_burst_end_vs_boundary_ms":-281,"elapsed_ms":356}
+{"label":"fixed_window","quota":100,"before_boundary":100,"after_boundary":100,"total_admitted":200,"first_burst_end_vs_boundary_ms":-259,"elapsed_ms":356}
+{"label":"fixed_window","quota":100,"before_boundary":100,"after_boundary":100,"total_admitted":200,"first_burst_end_vs_boundary_ms":-268,"elapsed_ms":355}
+# Capacity sweep
+{"label":"sweep:token_bucket","target_rate":5000,"achieved_rate":5025,"p50_ms":0.19,"p95_ms":0.5,"p99_ms":1.25,"max_ms":9.1,"allowed":100001,"rejected":0,"errors":0,"dropped":0}
+{"label":"sweep:sliding_window","target_rate":5000,"achieved_rate":5000,"p50_ms":0.19,"p95_ms":0.56,"p99_ms":1.56,"max_ms":8.99,"allowed":100001,"rejected":0,"errors":0,"dropped":0}
+{"label":"sweep:fixed_window","target_rate":5000,"achieved_rate":5000,"p50_ms":0.19,"p95_ms":0.51,"p99_ms":1.28,"max_ms":9.5,"allowed":100001,"rejected":0,"errors":0,"dropped":0}
+{"label":"sweep:token_bucket","target_rate":7000,"achieved_rate":7000,"p50_ms":0.2,"p95_ms":0.81,"p99_ms":2.58,"max_ms":15.76,"allowed":139998,"rejected":0,"errors":0,"dropped":0}
+{"label":"sweep:sliding_window","target_rate":7000,"achieved_rate":7000,"p50_ms":0.2,"p95_ms":0.76,"p99_ms":2.59,"max_ms":15.85,"allowed":140001,"rejected":0,"errors":0,"dropped":0}
+{"label":"sweep:fixed_window","target_rate":7000,"achieved_rate":7000,"p50_ms":0.2,"p95_ms":0.7,"p99_ms":2.1,"max_ms":8.31,"allowed":140002,"rejected":0,"errors":0,"dropped":0}
+{"label":"sweep:token_bucket","target_rate":9000,"achieved_rate":8941,"p50_ms":0.27,"p95_ms":4.9,"p99_ms":26.27,"max_ms":92.39,"allowed":178829,"rejected":0,"errors":0,"dropped":1170}
+{"label":"sweep:sliding_window","target_rate":9000,"achieved_rate":9000,"p50_ms":0.29,"p95_ms":3.02,"p99_ms":7.33,"max_ms":45.58,"allowed":180000,"rejected":0,"errors":0,"dropped":0}
+{"label":"sweep:fixed_window","target_rate":9000,"achieved_rate":8983,"p50_ms":0.27,"p95_ms":3.23,"p99_ms":8.51,"max_ms":65.52,"allowed":179661,"rejected":0,"errors":0,"dropped":340}
+# Gateway counters for the whole run
+gateway_ratelimit_check_duration_seconds_sum{algorithm="fixed_window"} 76.59277500199775
+gateway_ratelimit_check_duration_seconds_count{algorithm="fixed_window"} 960274
+gateway_ratelimit_check_duration_seconds_sum{algorithm="sliding_window"} 86.2632681050009
+gateway_ratelimit_check_duration_seconds_count{algorithm="sliding_window"} 960610
+gateway_ratelimit_check_duration_seconds_sum{algorithm="token_bucket"} 98.9936060320011
+gateway_ratelimit_check_duration_seconds_count{algorithm="token_bucket"} 959427
+gateway_redis_errors_total 0
