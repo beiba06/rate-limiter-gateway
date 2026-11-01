@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"gopkg.in/yaml.v3"
 )
 
@@ -21,8 +22,11 @@ type Route struct {
 }
 
 type Config struct {
-	Listen string  `yaml:"listen"`
-	Routes []Route `yaml:"routes"`
+	Listen    string           `yaml:"listen"`
+	RedisAddr string           `yaml:"redis_addr"`
+	Algorithm string           `yaml:"algorithm"`
+	Routes    []Route          `yaml:"routes"`
+	Keys      map[string]Limit `yaml:"keys"`
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -33,6 +37,14 @@ func loadConfig(path string) (*Config, error) {
 	var cfg Config
 	if err := yaml.Unmarshal(raw, &cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	if _, ok := scripts[cfg.Algorithm]; !ok {
+		return nil, fmt.Errorf("unknown algorithm %q", cfg.Algorithm)
+	}
+	for key, lim := range cfg.Keys {
+		if lim.Limit <= 0 || lim.Window < time.Millisecond {
+			return nil, fmt.Errorf("key %q: limit must be > 0 and window >= 1ms", key)
+		}
 	}
 	return &cfg, nil
 }
@@ -50,12 +62,25 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Short timeouts and no retries: a stalled Redis must fail open quickly
+	// rather than queue every request behind it.
+	rdb := redis.NewClient(&redis.Options{
+		Addr:         cfg.RedisAddr,
+		DialTimeout:  100 * time.Millisecond,
+		ReadTimeout:  100 * time.Millisecond,
+		WriteTimeout: 100 * time.Millisecond,
+		MaxRetries:   -1,
+	})
+	defer rdb.Close()
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	limiter := NewLimiter(rdb, cfg.Algorithm)
+
 	gateway := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           router,
+		Handler:           withRateLimit(cfg.Keys, limiter, router),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {

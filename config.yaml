@@ -1,6 +1,14 @@
-# Used by `go run . --config config.yaml`, with the backend on localhost.
+# Used by `go run . --config config.yaml`, with Redis and the backend on localhost.
 listen: ":8080"
+redis_addr: "localhost:6379"
+algorithm: token_bucket
 
 routes:
   - prefix: /api/
     backend: http://localhost:9001
+
+# limit requests per window. Requests with a key not listed here get a 401, so
+# rotating X-API-Key cannot mint fresh quota.
+keys:
+  user1: { limit: 5, window: 10s }
+  user2: { limit: 100, window: 1s }
